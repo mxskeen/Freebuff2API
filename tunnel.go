@@ -44,10 +44,6 @@ func (t *Tunnel) Start() (string, error) {
 	localURL := fmt.Sprintf("http://localhost:%d", t.port)
 	t.cmd = exec.Command(binary, "tunnel", "--url", localURL)
 
-	stdout, err := t.cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Errorf("cloudflared stdout pipe: %w", err)
-	}
 	stderr, err := t.cmd.StderrPipe()
 	if err != nil {
 		return "", fmt.Errorf("cloudflared stderr pipe: %w", err)
@@ -57,8 +53,8 @@ func (t *Tunnel) Start() (string, error) {
 		return "", fmt.Errorf("start cloudflared: %w", err)
 	}
 
-	// Parse combined output for the tunnel URL
-	go t.parseOutput(io.MultiReader(stdout, stderr))
+	// cloudflared writes the tunnel URL to stderr, not stdout.
+	go t.parseOutput(stderr)
 	go func() {
 		t.cmd.Wait()
 		close(t.stopped)
