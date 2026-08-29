@@ -86,9 +86,15 @@ install_termux_deps
 # Verify Go
 command -v go &>/dev/null || die "Go not found. Run: pkg install golang"
 ok "Go $(go version | grep -oP 'go\d+\.\d+' | head -1)"
-
 # ─── Download warp-plus (userspace SOCKS5 proxy) ──────────────────────────
+# Skip when SKIP_WARP_PLUS=1 is set (e.g. when a paid VPN is already routing
+# Termux through a non-restricted exit — adding warp-plus on top is just extra
+# latency with no net effect on the exit IP).
 install_warp_plus() {
+    if [ "${SKIP_WARP_PLUS:-0}" = "1" ]; then
+        info "SKIP_WARP_PLUS=1 — skipping warp-plus (using your VPN directly)"
+        return
+    fi
     if command -v warp-plus &>/dev/null; then
         ok "warp-plus found in PATH"
         return
@@ -125,8 +131,6 @@ install_warp_plus() {
     warn "  2. Set HTTP_PROXY to your own SOCKS5/HTTP proxy in config.json"
     warn "Continuing without auto-proxy (geo-restricted models may fail)..."
 }
-
-install_warp_plus
 
 # ─── Download cloudflared ─────────────────────────────────────────────────
 install_cloudflared() {
