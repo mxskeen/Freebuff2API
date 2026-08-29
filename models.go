@@ -249,8 +249,12 @@ func parseAllFreeModels(source string) map[string][]string {
 	return result
 }
 
-// buildModelMapping creates the model→agent reverse mapping and deduplicated model list.
-// When a model appears in multiple agents, one is chosen at random.
+// buildModelMapping creates the model→agent reverse mapping and deduplicated
+// model list. When a model appears in multiple agents, one is chosen at random.
+// The reverse map also accepts bare slugs (e.g. "deepseek-v4-flash") by
+// aliasing them to the same agent as the wire ID ("deepseek/deepseek-v4-flash")
+// — the FAQ and web UI display the bare form, and forcing every user to learn
+// the provider-prefixed wire ID is a footgun.
 func buildModelMapping(agentModels map[string][]string) (map[string]string, []string) {
 	modelAgents := make(map[string][]string)
 	for agentID, models := range agentModels {
@@ -259,11 +263,20 @@ func buildModelMapping(agentModels map[string][]string) (map[string]string, []st
 		}
 	}
 
-	modelToAgent := make(map[string]string, len(modelAgents))
+	modelToAgent := make(map[string]string, len(modelAgents)*2)
 	allModels := make([]string, 0, len(modelAgents))
 	for model, agents := range modelAgents {
 		modelToAgent[model] = agents[rand.IntN(len(agents))]
 		allModels = append(allModels, model)
+		// Alias: bare slug (last path segment) → same agent as the wire ID.
+		// Skips already-aliased entries (no double-aliasing) and skips
+		// models that don't contain a slash.
+		if idx := strings.LastIndex(model, "/"); idx > 0 {
+			slug := model[idx+1:]
+			if _, exists := modelToAgent[slug]; !exists {
+				modelToAgent[slug] = modelToAgent[model]
+			}
+		}
 	}
 	sort.Strings(allModels)
 	return modelToAgent, allModels
