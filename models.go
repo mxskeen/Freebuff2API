@@ -23,11 +23,12 @@ const (
 // upstream free-agents.ts source has been pared down to just one agent
 // (file-picker), so we seed the registry with the full known set from the
 // public Freebuff docs / FAQ. The remote fetch refreshes every 15min and
-// adds any new agents on top.
+// adds any new agents on top. Model IDs are taken directly from the
+// Freebuff FAQ at https://freebuff.com — full mode picker.
 var hardcodedFallback = map[string][]string{
-	"base2-free":  {"minimax/minimax-m2.7", "z-ai/glm-5.1", "deepseek/deepseek-chat", "deepseek/deepseek-v3", "deepseek/deepseek-r1", "xiaomi/mimo-v2-pro", "gpt-5.6-luna", "solar-pro-4", "deepseek-v4-flash", "mimo-2.5", "glm-5.3-flash", "glm-5.2"},
-	"file-picker": {"google/gemini-2.5-flash-lite"},
-	"basher":      {"google/gemini-2.5-flash-lite"},
+	"base2-free":  {"gpt-5.6-luna", "deepseek-v4-flash", "mimo-2.5", "solar-pro-4", "glm-5.3-flash", "glm-5.2"},
+	"file-picker": {"gemini-3.1-flash-lite"},
+	"basher":      {"gemini-3.1-flash-lite"},
 }
 
 // ModelRegistry fetches and caches the agent→model mapping for all free agents
