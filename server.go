@@ -469,7 +469,7 @@ func isSessionInvalid(statusCode int, errorBody []byte) bool {
 		return false
 	}
 	switch strings.TrimSpace(payload.Error) {
-	case "freebuff_update_required", "waiting_room_required", "waiting_room_queued", "session_superseded", "session_expired":
+	case "freebuff_update_required", "waiting_room_required", "waiting_room_queued", "session_superseded", "session_expired", "session_model_mismatch":
 		return true
 	default:
 		return false
