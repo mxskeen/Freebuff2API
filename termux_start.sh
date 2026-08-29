@@ -190,7 +190,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
     # Use warp-plus proxy by default if available
     DEFAULT_PROXY=""
-    if [ -x "$BIN_DIR/warp-plus" ] || command -v warp-plus &>/dev/null; then
+    if [ "${SKIP_WARP_PLUS:-0}" != "1" ] && { [ -x "$BIN_DIR/warp-plus" ] || command -v warp-plus &>/dev/null; }; then
         DEFAULT_PROXY="$PROXY_ADDR"
     fi
 
@@ -214,6 +214,13 @@ fi
 LISTEN_PORT=$(jq -r '.LISTEN_ADDR // ":8080"' "$CONFIG_FILE" | sed 's/^://')
 CONFIGURED_PROXY=$(jq -r '.HTTP_PROXY // ""' "$CONFIG_FILE")
 
+# If SKIP_WARP_PLUS=1 is set, clear any cached SOCKS5 proxy from a prior run.
+if [ "${SKIP_WARP_PLUS:-0}" = "1" ] && [ -n "$CONFIGURED_PROXY" ]; then
+    info "SKIP_WARP_PLUS=1 — clearing cached HTTP_PROXY ($CONFIGURED_PROXY) from config.json"
+    tmp=$(mktemp)
+    jq 'del(.HTTP_PROXY) | .HTTP_PROXY = ""' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+    CONFIGURED_PROXY=""
+fi
 # ─── Build ────────────────────────────────────────────────────────────────
 info "Building $BINARY_NAME..."
 go build -o "$BINARY_NAME" . || die "Build failed"
@@ -241,10 +248,12 @@ trap cleanup SIGINT SIGTERM EXIT
 
 # ─── Start warp-plus SOCKS5 proxy ─────────────────────────────────────────
 WARP_BIN=""
-if command -v warp-plus &>/dev/null; then
-    WARP_BIN="warp-plus"
-elif [ -x "$BIN_DIR/warp-plus" ]; then
-    WARP_BIN="$BIN_DIR/warp-plus"
+if [ "${SKIP_WARP_PLUS:-0}" != "1" ]; then
+    if command -v warp-plus &>/dev/null; then
+        WARP_BIN="warp-plus"
+    elif [ -x "$BIN_DIR/warp-plus" ]; then
+        WARP_BIN="$BIN_DIR/warp-plus"
+    fi
 fi
 
 # Only start warp-plus if config doesn't already have a proxy set
