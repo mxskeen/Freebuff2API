@@ -1,0 +1,16 @@
+# User credentials and runtime artifacts — never commit
+config.json
+.env
+*.log
+
+# Build artifacts
+freebuff2api
+freebuff2api.exe
+bin/
+cloudflared
+cloudflared.exe
+warp-plus
+
+# Local state
+*.pid
+.tmp/
