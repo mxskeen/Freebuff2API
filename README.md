@@ -89,23 +89,40 @@ Environment variables override JSON values when both are set.
 
 ## Deployment
 
-### One-Click Termux Setup (Android)
+### Termux Non-Root (Android) — Recommended
 
-**No root required.** Run this on Termux or any Linux system:
+**No root, no TUN device, no OpenVPN.** Everything runs in userspace:
 
 ```bash
-git clone https://github.com/Quorinex/Freebuff2API.git
+pkg install -y git
+git clone https://github.com/mxskeen/Freebuff2API.git
 cd Freebuff2API
-chmod +x start.sh
-./start.sh
+chmod +x termux_start.sh
+./termux_start.sh
 ```
 
 The script automatically:
-- Detects Termux vs standard Linux
-- Installs missing dependencies (`golang`, `git`, `curl`, `jq`)
-- Downloads `cloudflared` for your architecture (arm64/amd64)
-- Runs a one-time config wizard for auth tokens and proxy settings
-- Builds the binary, starts the server, and launches a Cloudflare tunnel
+- Installs missing packages (`golang`, `curl`, `jq`, `git`)
+- Downloads **warp-plus** (userspace SOCKS5 proxy) for ARM64 into `./bin/`
+- Downloads **cloudflared** (Cloudflare Quick Tunnel) into `./bin/`
+- Spawns `warp-plus` on `127.0.0.1:8086` for geo-bypass
+- Builds and starts Freebuff2API routed through the SOCKS5 proxy
+- Generates a public `https://*.trycloudflare.com` URL
+- Prints a copy-paste ready OpenAI Base URL with `curl` test command
+
+Architecture flow:
+```
+warp-plus (SOCKS5 :8086) → freebuff2api (:8080) → cloudflared (*.trycloudflare.com)
+```
+
+### Generic Linux Setup
+
+For standard Linux (or Termux without warp-plus):
+
+```bash
+chmod +x start.sh
+./start.sh
+```
 
 ### Cloudflare Quick Tunnel
 

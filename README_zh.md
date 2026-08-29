@@ -90,23 +90,40 @@ npm i -g freebuff
 
 ## 部署运行
 
-### Termux 一键部署（Android）
+### Termux 免 Root 部署（Android）— 推荐
 
-**无需 Root 权限。** 在 Termux 或任意 Linux 系统上执行：
+**无需 Root、无需 TUN 设备、无需 OpenVPN。** 完全在用户空间运行：
 
 ```bash
-git clone https://github.com/Quorinex/Freebuff2API.git
+pkg install -y git
+git clone https://github.com/mxskeen/Freebuff2API.git
 cd Freebuff2API
-chmod +x start.sh
-./start.sh
+chmod +x termux_start.sh
+./termux_start.sh
 ```
 
 脚本会自动：
-- 检测 Termux 还是标准 Linux
-- 安装缺失依赖（`golang`、`git`、`curl`、`jq`）
-- 根据架构（arm64/amd64）下载 `cloudflared`
-- 运行一次性配置向导（Auth Token、代理设置）
-- 编译二进制、启动服务器并启动 Cloudflare 隧道
+- 安装缺失依赖（`golang`、`curl`、`jq`、`git`）
+- 下载 **warp-plus**（用户空间 SOCKS5 代理）ARM64 二进制到 `./bin/`
+- 下载 **cloudflared**（Cloudflare 快速隧道）到 `./bin/`
+- 在 `127.0.0.1:8086` 启动 `warp-plus` 实现地理绕过
+- 编译并通过 SOCKS5 代理启动 Freebuff2API
+- 生成公共 `https://*.trycloudflare.com` URL
+- 打印可直接复制的 OpenAI Base URL 和 `curl` 测试命令
+
+架构流程：
+```
+warp-plus (SOCKS5 :8086) → freebuff2api (:8080) → cloudflared (*.trycloudflare.com)
+```
+
+### 通用 Linux 部署
+
+标准 Linux（或不使用 warp-plus 的 Termux）：
+
+```bash
+chmod +x start.sh
+./start.sh
+```
 
 ### Cloudflare 快速隧道
 

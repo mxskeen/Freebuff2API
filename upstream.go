@@ -26,6 +26,12 @@ type UpstreamClient struct {
 // newProxyTransport builds an http.Transport with SOCKS5 or HTTP proxy support.
 func newProxyTransport(proxyAddr string) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// Tune for long-lived SSE streaming connections (chat completions).
+	transport.DisableKeepAlives = false
+	transport.MaxIdleConns = 64
+	transport.MaxIdleConnsPerHost = 16
+	transport.IdleConnTimeout = 5 * time.Minute
+
 	if proxyAddr == "" {
 		return transport
 	}
