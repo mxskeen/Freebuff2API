@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"sort"
@@ -19,16 +19,28 @@ const (
 	modelRefreshInterval = 15 * time.Minute
 )
 
-// hardcodedFallback is a comprehensive mapping of known free agents. The
-// upstream free-agents.ts source has been pared down to just one agent
-// (file-picker), so we seed the registry with the full known set from the
-// public Freebuff docs / FAQ. The remote fetch refreshes every 15min and
-// adds any new agents on top. Model IDs are taken directly from the
-// Freebuff FAQ at https://freebuff.com — full mode picker.
+// hardcodedFallback is the canonical model→agent mapping sourced from the
+// upstream codebuff/common/src/constants/free-agents.ts. Wire IDs are exact
+// (e.g. "z-ai/glm-5.2", "openai/gpt-5.6-luna") — the upstream's
+// isFreeModeAllowedAgentModel does an exact Set.has(model) check, so a bare
+// slug will 403 with free_mode_invalid_agent_model even on the right agent.
+//
+// We use base3 roots for new free sessions (per docs/freebuff-base3-harness.md):
+// base2 is the older harness kept for already-admitted sessions and the
+// FREEBUFF_BASE3_HARNESS_DISABLED kill switch.
 var hardcodedFallback = map[string][]string{
-	"base2-free":  {"gpt-5.6-luna", "deepseek-v4-flash", "mimo-2.5", "solar-pro-4", "glm-5.3-flash", "glm-5.2"},
-	"file-picker": {"gemini-3.1-flash-lite"},
-	"basher":      {"gemini-3.1-flash-lite"},
+	"base3-free-deepseek-flash":   {"deepseek/deepseek-v4-flash"},
+	"base3-free-deepseek":         {"deepseek/deepseek-v4-pro"},
+	"base3-free-mimo":             {"mimo/mimo-v2.5"},
+	"base3-free-minimax-m3":       {"minimax/minimax-m3"},
+	"base3-free-luna":             {"openai/gpt-5.6-luna"},
+	"base3-free-solar-pro4":       {"upstage/solar-pro4"},
+	"base3-free-glm":              {"z-ai/glm-5.2"},
+	"base3-free-glm-5-3-flash":    {"z-ai/glm-5.3-flash"},
+	"base3-free-kimi-k3-eco":      {"crof/kimi-k3-eco"},
+	"base3-free-fable":            {"anthropic/claude-fable-5"},
+	"base3-free-ox-alpha":         {"stealth/ox-alpha"},
+	"file-picker":                 {"google/gemini-3.5-flash-lite", "google/gemini-3.1-flash-lite"},
 }
 
 // ModelRegistry fetches and caches the agent→model mapping for all free agents
@@ -114,18 +126,20 @@ func (r *ModelRegistry) AgentForModel(model string) (string, bool) {
 }
 
 // DefaultAgentID returns the preferred agent ID for permissive routing when
-// a requested model has no explicit mapping. Prefers base2-free (broadest
-// model coverage) and falls back to any other known agent.
+// a requested model has no explicit mapping. Prefers base3-free-deepseek-flash
+// (the Freebuff CLI's default picker root per the FAQ) and falls back to any
+// other known base3 root. Never falls back to legacy "base2-free" — that
+// allowlist covers 5 models and rejects everything else.
 func (r *ModelRegistry) DefaultAgentID() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if _, ok := r.agentModels["base2-free"]; ok {
-		return "base2-free"
+	if _, ok := r.agentModels["base3-free-deepseek-flash"]; ok {
+		return "base3-free-deepseek-flash"
 	}
 	for id := range r.agentModels {
 		return id
 	}
-	return "base2-free"
+	return "base3-free-deepseek-flash"
 }
 
 // AgentIDs returns the list of all known agent IDs.
@@ -248,7 +262,7 @@ func buildModelMapping(agentModels map[string][]string) (map[string]string, []st
 	modelToAgent := make(map[string]string, len(modelAgents))
 	allModels := make([]string, 0, len(modelAgents))
 	for model, agents := range modelAgents {
-		modelToAgent[model] = agents[rand.Intn(len(agents))]
+		modelToAgent[model] = agents[rand.IntN(len(agents))]
 		allModels = append(allModels, model)
 	}
 	sort.Strings(allModels)

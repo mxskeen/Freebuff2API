@@ -22,6 +22,65 @@ type Server struct {
 	started  time.Time
 }
 
+// freebuffRootSystemPromptOpening is the exact prefix the upstream
+// hasFreebuffRootSystemPromptOpening accepts for base3 roots. The check is
+// byte-exact: any extra leading whitespace or differing wording 403s the
+// request. We use the base3 opening because the proxy routes to base3-free-*
+// agents.
+const freebuffRootSystemPromptOpening = "You are Buffy, the coding agent behind Codebuff."
+
+// systemPromptString returns the system message text from an OpenAI-shaped
+// payload, supporting both the "string" and "[{role,content}]" formats.
+func systemPromptString(payload map[string]any) string {
+	v, ok := payload["messages"]
+	if !ok {
+		return ""
+	}
+	msgs, ok := v.([]any)
+	if !ok {
+		return ""
+	}
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		if role, _ := mm["role"].(string); role == "system" {
+			if s, ok := mm["content"].(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// setSystemPrompt sets the system message text in the payload, creating one
+// at the front of the messages list if there isn't already a system message.
+func setSystemPrompt(payload map[string]any, text string) {
+	msgs, _ := payload["messages"].([]any)
+	replaced := false
+	for i, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		if role, _ := mm["role"].(string); role == "system" {
+			mm["content"] = text
+			msgs[i] = mm
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		prepended := make([]any, 0, len(msgs)+1)
+		prepended = append(prepended, map[string]any{"role": "system", "content": text})
+		prepended = append(prepended, msgs...)
+		payload["messages"] = prepended
+		return
+	}
+	payload["messages"] = msgs
+}
+
 func NewServer(cfg Config, logger *log.Logger, registry *ModelRegistry) *Server {
 	client := NewUpstreamClient(cfg)
 	runManager := NewRunManager(cfg, client, logger)
@@ -377,6 +436,20 @@ func (s *Server) injectUpstreamMetadata(payload map[string]any, requestedModel, 
 		metadata["freebuff_instance_id"] = sessionInstanceID
 	}
 	cloned["codebuff_metadata"] = metadata
+
+	// Inject the Freebuff root system-prompt opening. The upstream
+	// hasFreebuffRootSystemPromptOpening runs before the agent/model check and
+	// demands this exact opening as the first text in the system prompt (after
+	// trimStart, byte-exact). Without it, every free-mode request 403s.
+	// We use the base3 opening (the modern harness used by Web + CLI).
+	existing := strings.TrimSpace(systemPromptString(cloned))
+	var buf strings.Builder
+	buf.WriteString(freebuffRootSystemPromptOpening)
+	if existing != "" {
+		buf.WriteString("\n\n")
+		buf.WriteString(existing)
+	}
+	setSystemPrompt(cloned, buf.String())
 
 	body, err := json.Marshal(cloned)
 	if err != nil {
