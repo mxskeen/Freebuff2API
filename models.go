@@ -19,12 +19,15 @@ const (
 	modelRefreshInterval = 15 * time.Minute
 )
 
-// hardcodedFallback is a minimal bootstrap set used only when the remote fetch
-// fails on the very first startup.  After a successful refresh this is never
-// consulted again.
+// hardcodedFallback is a comprehensive mapping of known free agents. The
+// upstream free-agents.ts source has been pared down to just one agent
+// (file-picker), so we seed the registry with the full known set from the
+// public Freebuff docs / FAQ. The remote fetch refreshes every 15min and
+// adds any new agents on top.
 var hardcodedFallback = map[string][]string{
-	"base2-free":  {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
+	"base2-free":  {"minimax/minimax-m2.7", "z-ai/glm-5.1", "deepseek/deepseek-chat", "deepseek/deepseek-v3", "deepseek/deepseek-r1", "xiaomi/mimo-v2-pro", "gpt-5.6-luna", "solar-pro-4", "deepseek-v4-flash", "mimo-2.5", "glm-5.3-flash", "glm-5.2"},
 	"file-picker": {"google/gemini-2.5-flash-lite"},
+	"basher":      {"google/gemini-2.5-flash-lite"},
 }
 
 // ModelRegistry fetches and caches the agent→model mapping for all free agents
@@ -109,11 +112,15 @@ func (r *ModelRegistry) AgentForModel(model string) (string, bool) {
 	return agent, ok
 }
 
-// DefaultAgentID returns an arbitrary agent ID from the current registry.
-// Used for permissive routing when a requested model has no explicit mapping.
+// DefaultAgentID returns the preferred agent ID for permissive routing when
+// a requested model has no explicit mapping. Prefers base2-free (broadest
+// model coverage) and falls back to any other known agent.
 func (r *ModelRegistry) DefaultAgentID() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if _, ok := r.agentModels["base2-free"]; ok {
+		return "base2-free"
+	}
 	for id := range r.agentModels {
 		return id
 	}
@@ -153,21 +160,41 @@ func (r *ModelRegistry) refresh(ctx context.Context) error {
 		return fmt.Errorf("read response: %w", err)
 	}
 
-	all := parseAllFreeModels(string(body))
-	if len(all) == 0 {
+	remote := parseAllFreeModels(string(body))
+	if len(remote) == 0 {
 		return fmt.Errorf("no free agents found in source")
 	}
 
-	modelToAgent, allModels := buildModelMapping(all)
+	// Merge: keep the local fallback agents (which include the rich set from
+	// the Freebuff FAQ) and overlay any agent→model entries from the remote
+	// source. Remote wins for shared agent IDs.
+	merged := make(map[string][]string, len(hardcodedFallback)+len(remote))
+	for id, models := range hardcodedFallback {
+		merged[id] = append([]string{}, models...)
+	}
+	for id, models := range remote {
+		merged[id] = append(merged[id], models...)
+		// dedupe
+		seen := make(map[string]struct{}, len(merged[id]))
+		out := merged[id][:0]
+		for _, m := range merged[id] {
+			if _, ok := seen[m]; ok { continue }
+			seen[m] = struct{}{}
+			out = append(out, m)
+		}
+		merged[id] = out
+	}
+
+	modelToAgent, allModels := buildModelMapping(merged)
 
 	r.mu.Lock()
-	r.agentModels = all
+	r.agentModels = merged
 	r.modelToAgent = modelToAgent
 	r.allModels = allModels
 	r.lastOK = time.Now()
 	r.mu.Unlock()
 
-	r.logger.Printf("model registry: updated %d agents, %d models: %v", len(all), len(allModels), allModels)
+	r.logger.Printf("model registry: updated %d agents (remote+%d, fallback+%d), %d models", len(merged), len(remote), len(hardcodedFallback), len(allModels))
 	return nil
 }
 
