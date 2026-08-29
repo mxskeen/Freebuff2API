@@ -16,24 +16,15 @@ import (
 
 const (
 	freeAgentsSourceURL  = "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/free-agents.ts"
-	modelRefreshInterval = 6 * time.Hour
+	modelRefreshInterval = 15 * time.Minute
 )
 
-// hardcodedFallback is used when the remote fetch fails on startup.
+// hardcodedFallback is a minimal bootstrap set used only when the remote fetch
+// fails on the very first startup.  After a successful refresh this is never
+// consulted again.
 var hardcodedFallback = map[string][]string{
-	"base2-free":         {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
-	"file-picker":        {"google/gemini-2.5-flash-lite"},
-	"file-picker-max":    {"google/gemini-3.1-flash-lite-preview"},
-	"file-lister":        {"google/gemini-3.1-flash-lite-preview"},
-	"researcher-web":     {"google/gemini-3.1-flash-lite-preview"},
-	"researcher-docs":    {"google/gemini-3.1-flash-lite-preview"},
-	"basher":             {"google/gemini-3.1-flash-lite-preview"},
-	"editor-lite":        {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
-	"code-reviewer-lite": {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
-	// Extended fallback models for broader compatibility
-	"deepseek-free": {"deepseek/deepseek-chat", "deepseek/deepseek-coder", "deepseek/deepseek-v3", "deepseek/deepseek-r1"},
-	"mimo-free":     {"xiaomi/mimo-v2-pro", "xiaomi/mimo-v2-flash"},
-	"glm-free":      {"z-ai/glm-5.1", "z-ai/glm-4-flash"},
+	"base2-free":  {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
+	"file-picker": {"google/gemini-2.5-flash-lite"},
 }
 
 // ModelRegistry fetches and caches the agent→model mapping for all free agents
@@ -116,6 +107,17 @@ func (r *ModelRegistry) AgentForModel(model string) (string, bool) {
 	defer r.mu.RUnlock()
 	agent, ok := r.modelToAgent[model]
 	return agent, ok
+}
+
+// DefaultAgentID returns an arbitrary agent ID from the current registry.
+// Used for permissive routing when a requested model has no explicit mapping.
+func (r *ModelRegistry) DefaultAgentID() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id := range r.agentModels {
+		return id
+	}
+	return "base2-free"
 }
 
 // AgentIDs returns the list of all known agent IDs.

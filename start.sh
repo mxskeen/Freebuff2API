@@ -211,15 +211,10 @@ ok "Build complete: $SCRIPT_DIR/$BINARY_NAME"
 
 # ─── Process management ────────────────────────────────────────────────────
 SERVER_PID=""
-TUNNEL_PID=""
 
 cleanup() {
     echo ""
     info "Shutting down..."
-    if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
-        kill "$TUNNEL_PID" 2>/dev/null || true
-        wait "$TUNNEL_PID" 2>/dev/null || true
-    fi
     if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
@@ -229,14 +224,15 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
-# ─── Start the server ─────────────────────────────────────────────────────
-info "Starting Freebuff2API server..."
+# ─── Resolve health-check port from config ─────────────────────────────────
+HEALTH_PORT=$(jq -r '.LISTEN_ADDR // ":8080"' "$CONFIG_FILE" | sed 's/^://')
+info "Starting Freebuff2API server (port $HEALTH_PORT)..."
 "./$BINARY_NAME" -tunnel &
 SERVER_PID=$!
 
 # Wait for the server to be ready
 for i in $(seq 1 30); do
-    if curl -sf "http://localhost:8080/healthz" >/dev/null 2>&1; then
+    if curl -sf "http://localhost:${HEALTH_PORT}/healthz" >/dev/null 2>&1; then
         ok "Server is ready"
         break
     fi

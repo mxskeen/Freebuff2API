@@ -120,7 +120,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 			"id":         model,
 			"object":     "model",
 			"created":    created,
-			"owned_by":   "Freebuff2API",
+			"owned_by":   "freebuff",
 			"root":       model,
 			"permission": []any{},
 		})
@@ -260,8 +260,9 @@ func (s *Server) proxyChatRequest(
 
 	agentID, ok := s.registry.AgentForModel(requestedModel)
 	if !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unsupported model %q", requestedModel), invalidRequestType, "model_not_found")
-		return
+		// Permissive routing: let upstream decide if the model is valid.
+		agentID = s.registry.DefaultAgentID()
+		s.logger.Printf("model %q not in local registry, falling back to agent %q", requestedModel, agentID)
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
