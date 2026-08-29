@@ -382,6 +382,16 @@ func (s *Server) proxyChatRequest(
 
 		if isSessionInvalid(resp.StatusCode, errorBody) {
 			s.logger.Printf("%s: free session invalid, refreshing and retrying", lease.pool.name)
+			// session_model_mismatch means the upstream session is bound to a
+			// different model. We must DELETE the upstream session before
+			// CreateOrRefreshSession will return a fresh one bound to the
+			// new model — otherwise the upstream reuses the same instance
+			// and the mismatch recurs forever.
+			if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(errorBody), "session_model_mismatch") {
+				if err := lease.pool.endSession(r.Context()); err != nil {
+					s.logger.Printf("%s: end session for model switch: %v", lease.pool.name, err)
+				}
+			}
 			lease.pool.invalidateSession(strings.TrimSpace(string(errorBody)))
 			s.runs.Release(lease)
 			continue
