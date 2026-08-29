@@ -9,7 +9,9 @@ Freebuff2API is an OpenAI-compatible proxy server for [Freebuff](https://freebuf
 - **OpenAI Compatible API** — Standard OpenAI endpoints; works with any compatible client out of the box.
 - **Stealth Request Handling** — Dynamic, randomized client fingerprints that mimic official Freebuff SDK behavior.
 - **Multi-Token Rotation** — Cycle through multiple auth tokens with automatic periodic rotation.
-- **HTTP Proxy Support** — Route all outbound traffic through a configurable upstream proxy.
+- **HTTP & SOCKS5 Proxy Support** — Route all outbound traffic through HTTP, HTTPS, or SOCKS5 proxies (WARP, Shadowsocks, etc.) for regional bypass.
+- **Cloudflare Quick Tunnels** — Built-in tunnel support exposes a public HTTPS URL with zero port forwarding or account setup.
+- **Geo-Bypass Headers** — Inject spoofed upstream headers (`X-Forwarded-For`, `CF-Connecting-IP`, `X-Real-IP`) to handle regional restrictions.
 
 ## Getting Auth Tokens
 
@@ -66,7 +68,8 @@ Configuration is managed via a JSON file and/or environment variables. The JSON 
   "ROTATION_INTERVAL": "6h",
   "REQUEST_TIMEOUT": "15m",
   "API_KEYS": [],
-  "HTTP_PROXY": ""
+  "HTTP_PROXY": "",
+  "UPSTREAM_HEADERS": {}
 }
 ```
 
@@ -80,11 +83,46 @@ Configuration is managed via a JSON file and/or environment variables. The JSON 
 | `ROTATION_INTERVAL` | Run rotation interval (default `6h`) |
 | `REQUEST_TIMEOUT` | Upstream request timeout (default `15m`) |
 | `API_KEYS` | Client API keys for proxy auth (empty = open access) |
-| `HTTP_PROXY` | HTTP proxy for outbound requests |
-
+| `HTTP_PROXY` | HTTP/SOCKS5 proxy for outbound requests (supports `socks5://`, `http://`, `https://`) |
+| `UPSTREAM_HEADERS` | Upstream geo-spoof headers (JSON object, e.g. `{"X-Forwarded-For": "1.2.3.4"}`) |
 Environment variables override JSON values when both are set.
 
 ## Deployment
+
+### One-Click Termux Setup (Android)
+
+**No root required.** Run this on Termux or any Linux system:
+
+```bash
+git clone https://github.com/Quorinex/Freebuff2API.git
+cd Freebuff2API
+chmod +x start.sh
+./start.sh
+```
+
+The script automatically:
+- Detects Termux vs standard Linux
+- Installs missing dependencies (`golang`, `git`, `curl`, `jq`)
+- Downloads `cloudflared` for your architecture (arm64/amd64)
+- Runs a one-time config wizard for auth tokens and proxy settings
+- Builds the binary, starts the server, and launches a Cloudflare tunnel
+
+### Cloudflare Quick Tunnel
+
+Expose a public HTTPS URL without port forwarding:
+
+```bash
+# Via start.sh (automatic)
+./start.sh
+
+# Via binary directly
+./Freebuff2api -tunnel
+
+# Via environment variable
+ENABLE_TUNNEL=true ./Freebuff2API
+```
+
+The tunnel URL is printed to stdout and works immediately — no Cloudflare account needed.
 
 ### Docker
 
@@ -114,6 +152,26 @@ cd Freebuff2API
 go build -o Freebuff2API .
 ./Freebuff2API -config config.json
 ```
+
+### SOCKS5/HTTP Proxy for Regional Bypass
+
+Route upstream traffic through a proxy to bypass regional restrictions:
+
+```json
+{
+  "HTTP_PROXY": "socks5://127.0.0.1:1080"
+}
+```
+
+Or via environment:
+
+```bash
+export ALL_PROXY="socks5://127.0.0.1:1080"
+./Freebuff2API
+```
+
+Supported schemes: `socks5://`, `socks5h://`, `http://`, `https://`.
+Fallback order: `HTTP_PROXY` → `HTTPS_PROXY` → `ALL_PROXY` → `http_proxy`.
 
 ## Links
 

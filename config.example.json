@@ -5,5 +5,6 @@
   "ROTATION_INTERVAL": "6h",
   "REQUEST_TIMEOUT": "15m",
   "API_KEYS": [],
-  "HTTP_PROXY": ""
+  "HTTP_PROXY": "",
+  "UPSTREAM_HEADERS": {}
 }

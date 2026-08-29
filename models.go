@@ -30,6 +30,10 @@ var hardcodedFallback = map[string][]string{
 	"basher":             {"google/gemini-3.1-flash-lite-preview"},
 	"editor-lite":        {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
 	"code-reviewer-lite": {"minimax/minimax-m2.7", "z-ai/glm-5.1"},
+	// Extended fallback models for broader compatibility
+	"deepseek-free": {"deepseek/deepseek-chat", "deepseek/deepseek-coder", "deepseek/deepseek-v3", "deepseek/deepseek-r1"},
+	"mimo-free":     {"xiaomi/mimo-v2-pro", "xiaomi/mimo-v2-flash"},
+	"glm-free":      {"z-ai/glm-5.1", "z-ai/glm-4-flash"},
 }
 
 // ModelRegistry fetches and caches the agent→model mapping for all free agents

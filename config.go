@@ -21,16 +21,18 @@ type Config struct {
 	UserAgent        string
 	APIKeys          []string
 	HTTPProxy        string
+	UpstreamHeaders  map[string]string // optional spoofed geo headers for upstream
 }
 
 type rawConfig struct {
-	ListenAddr       string   `json:"LISTEN_ADDR"`
-	UpstreamBaseURL  string   `json:"UPSTREAM_BASE_URL"`
-	AuthTokens       []string `json:"AUTH_TOKENS"`
-	RotationInterval string   `json:"ROTATION_INTERVAL"`
-	RequestTimeout   string   `json:"REQUEST_TIMEOUT"`
-	APIKeys          []string `json:"API_KEYS"`
-	HTTPProxy        string   `json:"HTTP_PROXY"`
+	ListenAddr       string            `json:"LISTEN_ADDR"`
+	UpstreamBaseURL  string            `json:"UPSTREAM_BASE_URL"`
+	AuthTokens       []string          `json:"AUTH_TOKENS"`
+	RotationInterval string            `json:"ROTATION_INTERVAL"`
+	RequestTimeout   string            `json:"REQUEST_TIMEOUT"`
+	APIKeys          []string          `json:"API_KEYS"`
+	HTTPProxy        string            `json:"HTTP_PROXY"`
+	UpstreamHeaders  map[string]string `json:"UPSTREAM_HEADERS"`
 }
 
 func loadConfig(configPath string) (Config, error) {
@@ -46,6 +48,9 @@ func loadConfig(configPath string) (Config, error) {
 	overrideCSV(&cfg.AuthTokens, "AUTH_TOKENS")
 	overrideCSV(&cfg.APIKeys, "API_KEYS")
 	overrideString(&cfg.HTTPProxy, "HTTP_PROXY")
+
+	// Proxy fallback: HTTP_PROXY → HTTPS_PROXY → ALL_PROXY
+	cfg.HTTPProxy = resolveProxy(cfg.HTTPProxy)
 
 	rotationInterval, err := time.ParseDuration(strings.TrimSpace(cfg.RotationInterval))
 	if err != nil {
@@ -66,6 +71,7 @@ func loadConfig(configPath string) (Config, error) {
 		UserAgent:        generateUserAgent(),
 		APIKeys:          dedupeStrings(cfg.APIKeys),
 		HTTPProxy:        strings.TrimSpace(cfg.HTTPProxy),
+		UpstreamHeaders:  cfg.UpstreamHeaders,
 	}
 
 	switch {
@@ -100,6 +106,20 @@ func normalizeUpstreamBaseURL(raw string) string {
 	}
 
 	return strings.TrimRight(parsed.String(), "/")
+}
+
+// resolveProxy returns the explicit proxy value, or falls back through the
+// standard environment variables: HTTPS_PROXY, ALL_PROXY, http_proxy, etc.
+func resolveProxy(explicit string) string {
+	if strings.TrimSpace(explicit) != "" {
+		return explicit
+	}
+	for _, key := range []string{"HTTPS_PROXY", "ALL_PROXY", "https_proxy", "all_proxy", "http_proxy"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func loadRawConfig(configPath string) (rawConfig, error) {

@@ -9,7 +9,9 @@ Freebuff2API 是 [Freebuff](https://freebuff.com) 的 OpenAI 兼容代理服务�
 - **OpenAI 兼容 API** — 标准 OpenAI 端点，开箱即用，支持任意兼容客户端。
 - **高隐匿性请求处理** — 动态随机客户端特征标识，模拟官方 Freebuff SDK 行为模式。
 - **多 Token 轮换** — 支持多个认证 Token，内置定期自动轮换机制。
-- **HTTP 代理支持** — 可为所有外部请求配置上游 HTTP 代理。
+- **HTTP & SOCKS5 代理支持** — 支持 HTTP、HTTPS 和 SOCKS5 代理（WARP、Shadowsocks 等）实现区域绕过。
+- **Cloudflare 快速隧道** — 内置隧道支持，无需端口转发或账户设置即可暴露公共 HTTPS URL。
+- **地理绕过头部** — 注入伪造的上游请求头（`X-Forwarded-For`、`CF-Connecting-IP`、`X-Real-IP`）处理区域限制。
 
 ## 获取 Auth Token
 
@@ -66,7 +68,8 @@ npm i -g freebuff
   "ROTATION_INTERVAL": "6h",
   "REQUEST_TIMEOUT": "15m",
   "API_KEYS": [],
-  "HTTP_PROXY": ""
+  "HTTP_PROXY": "",
+  "UPSTREAM_HEADERS": {}
 }
 ```
 
@@ -80,11 +83,47 @@ npm i -g freebuff
 | `ROTATION_INTERVAL` | Run 自动轮换间隔（默认 `6h`） |
 | `REQUEST_TIMEOUT` | 上游请求超时时间（默认 `15m`） |
 | `API_KEYS` | 客户端鉴权 API Key（留空则无需鉴权） |
-| `HTTP_PROXY` | 上游 HTTP 代理地址 |
+| `HTTP_PROXY` | 上游 HTTP/SOCKS5 代理地址（支持 `socks5://`、`http://`、`https://`） |
+| `UPSTREAM_HEADERS` | 上游地理伪装请求头（JSON 对象，如 `{"X-Forwarded-For": "1.2.3.4"}`） |
 
 同时设置时，环境变量优先于 JSON 配置文件。
 
 ## 部署运行
+
+### Termux 一键部署（Android）
+
+**无需 Root 权限。** 在 Termux 或任意 Linux 系统上执行：
+
+```bash
+git clone https://github.com/Quorinex/Freebuff2API.git
+cd Freebuff2API
+chmod +x start.sh
+./start.sh
+```
+
+脚本会自动：
+- 检测 Termux 还是标准 Linux
+- 安装缺失依赖（`golang`、`git`、`curl`、`jq`）
+- 根据架构（arm64/amd64）下载 `cloudflared`
+- 运行一次性配置向导（Auth Token、代理设置）
+- 编译二进制、启动服务器并启动 Cloudflare 隧道
+
+### Cloudflare 快速隧道
+
+无需端口转发即可暴露公共 HTTPS URL：
+
+```bash
+# 通过 start.sh（自动）
+./start.sh
+
+# 直接通过二进制
+./Freebuff2API -tunnel
+
+# 通过环境变量
+ENABLE_TUNNEL=true ./Freebuff2API
+```
+
+隧道 URL 会打印到终端，立即可用——无需 Cloudflare 账户。
 
 ### Docker 部署
 
@@ -114,6 +153,26 @@ cd Freebuff2API
 go build -o Freebuff2API .
 ./Freebuff2API -config config.json
 ```
+
+### SOCKS5/HTTP 代理实现区域绕过
+
+通过代理路由上游流量以绕过区域限制：
+
+```json
+{
+  "HTTP_PROXY": "socks5://127.0.0.1:1080"
+}
+```
+
+或通过环境变量：
+
+```bash
+export ALL_PROXY="socks5://127.0.0.1:1080"
+./Freebuff2API
+```
+
+支持协议：`socks5://`、`socks5h://`、`http://`、`https://`。
+回退顺序：`HTTP_PROXY` → `HTTPS_PROXY` → `ALL_PROXY` → `http_proxy`。
 
 ## 友情链接
 

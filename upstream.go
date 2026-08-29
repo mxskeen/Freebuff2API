@@ -6,34 +6,69 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 )
 
 type UpstreamClient struct {
-	baseURL    string
-	httpClient *http.Client
-	userAgent  string
+	baseURL         string
+	httpClient      *http.Client
+	userAgent       string
+	upstreamHeaders map[string]string
+}
+
+// newProxyTransport builds an http.Transport with SOCKS5 or HTTP proxy support.
+func newProxyTransport(proxyAddr string) *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if proxyAddr == "" {
+		return transport
+	}
+	proxyURL, err := url.Parse(proxyAddr)
+	if err != nil {
+		return transport
+	}
+	switch proxyURL.Scheme {
+	case "socks5", "socks5h":
+		addr := proxyURL.Host
+		if proxyURL.Port() == "" {
+			addr = net.JoinHostPort(proxyURL.Hostname(), "1080")
+		}
+		var auth *proxy.Auth
+		if proxyURL.User != nil {
+			auth = &proxy.Auth{
+				User:     proxyURL.User.Username(),
+				Password: "",
+			}
+			if pw, ok := proxyURL.User.Password(); ok {
+				auth.Password = pw
+			}
+		}
+		if dialer, err := proxy.SOCKS5("tcp", addr, auth, proxy.Direct); err == nil {
+			if cd, ok := dialer.(proxy.ContextDialer); ok {
+				transport.DialContext = cd.DialContext
+			}
+		}
+	default:
+		transport.Proxy = http.ProxyURL(proxyURL)
+	}
+	return transport
 }
 
 func NewUpstreamClient(cfg Config) *UpstreamClient {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if cfg.HTTPProxy != "" {
-		if proxyURL, err := url.Parse(cfg.HTTPProxy); err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-		}
-	}
-
 	return &UpstreamClient{
 		baseURL: cfg.UpstreamBaseURL,
 		httpClient: &http.Client{
 			Timeout:   cfg.RequestTimeout,
-			Transport: transport,
+			Transport: newProxyTransport(cfg.HTTPProxy),
 		},
-		userAgent: cfg.UserAgent,
+		userAgent:       cfg.UserAgent,
+		upstreamHeaders: cfg.UpstreamHeaders,
 	}
 }
 
@@ -136,6 +171,9 @@ func (c *UpstreamClient) doJSON(ctx context.Context, authToken, path string, bod
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("User-Agent", c.userAgent)
+	for k, v := range c.upstreamHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
